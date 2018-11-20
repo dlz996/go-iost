@@ -218,7 +218,9 @@ func (p *PoB) doVerifyBlock(vbm *verifyBlockMessage) {
 		} else {
 			p.blockReqMap.Store(string(blk.HeadHash()), nil)
 		}
+		ilog.Info("start to handle recv block, new")
 		err := p.handleRecvBlock(blk, true)
+		ilog.Info("end of handle recv block, new")
 		ilog.Info(p.blockCache.Draw())
 		t2 := calculateTime(blk)
 		metricsTimeCost.Set(t2, nil)
@@ -229,7 +231,9 @@ func (p *PoB) doVerifyBlock(vbm *verifyBlockMessage) {
 			return
 		}
 	case p2p.SyncBlockResponse:
+		ilog.Info("start to handle recv block, sync")
 		err := p.handleRecvBlock(blk, true)
+		ilog.Info("end of handle recv block, sync")
 		ilog.Info(p.blockCache.Draw())
 		if err != nil {
 			ilog.Errorf("received sync block error, err:%v", err)

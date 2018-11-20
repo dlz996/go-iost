@@ -51,11 +51,13 @@ func generateBlock(acc *account.KeyPair, txPool txpool.TxPool, db db.MVCCDB, lim
 	// call vote
 	v := verifier.Verifier{}
 	t1 := time.Now()
+	ilog.Info("start to generate")
 	dropList, _, err := v.Gen(&blk, topBlock, db, pTx, &verifier.Config{
 		Mode:        0,
 		Timeout:     limitTime - time.Now().Sub(st),
 		TxTimeLimit: time.Millisecond * 100,
 	})
+	ilog.Info("end of generate")
 	t2 := time.Since(t1)
 	if len(blk.Txs) != 0 {
 		ilog.Info("time spent per tx:", t2.Nanoseconds()/int64(len(blk.Txs)))
@@ -136,6 +138,8 @@ func verifyBlock(blk *block.Block, parent *block.Block, lib *block.Block, txPool
 			}
 		}
 	}
+	ilog.Infof("[pob] end of verify block if foundchain, number: %v, hash = %v, witness = %v", blk.Head.Number, common.Base58Encode(blk.HeadHash()), blk.Head.Witness[4:6])
+
 	v := verifier.Verifier{}
 	return v.Verify(blk, parent, db, &verifier.Config{
 		Mode:        0,
