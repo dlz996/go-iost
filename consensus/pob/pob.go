@@ -34,8 +34,10 @@ var (
 )
 
 var (
-	blockReqTimeout = 3 * time.Second
-	continuousNum   = 10
+	blockReqTimeout  = 3 * time.Second
+	continuousNum    = 10
+	tmpWitness       = ""
+	tmpcontinuousNum = 0
 )
 
 type verifyBlockMessage struct {
@@ -141,12 +143,12 @@ func (p *PoB) messageLoop() {
 func (p *PoB) handleRecvBlockHash(blkInfo *msgpb.BlockInfo, peerID p2p.PeerID) {
 	_, ok := p.blockReqMap.Load(string(blkInfo.Hash))
 	if ok {
-		ilog.Info("block in block request map, block number: ", blkInfo.Number)
+		ilog.Debug("block in block request map, block number: ", blkInfo.Number)
 		return
 	}
 	_, err := p.blockCache.Find(blkInfo.Hash)
 	if err == nil {
-		ilog.Info("duplicate block, block number: ", blkInfo.Number)
+		ilog.Debug("duplicate block, block number: ", blkInfo.Number)
 		return
 	}
 	bytes, err := blkInfo.Marshal()
@@ -162,10 +164,8 @@ func (p *PoB) handleRecvBlockHash(blkInfo *msgpb.BlockInfo, peerID p2p.PeerID) {
 
 func (p *PoB) handleBlockQuery(rh *msgpb.BlockInfo, peerID p2p.PeerID) {
 	var blk *block.Block
-	node, err := p.blockCache.Find(rh.Hash)
-	if err == nil {
-		blk = node.Block
-	} else {
+	blk, err := p.blockCache.GetBlockByHash(rh.Hash)
+	if err != nil {
 		blk, err = p.baseVariable.BlockChain().GetBlockByHash(rh.Hash)
 		if err != nil {
 			ilog.Errorf("handle block query failed to get block.")
@@ -203,7 +203,7 @@ func (p *PoB) doVerifyBlock(vbm *verifyBlockMessage) {
 	if p.baseVariable.Mode() == global.ModeInit {
 		return
 	}
-	ilog.Infof("verify block chan size:%v", len(p.chVerifyBlock))
+	ilog.Debugf("verify block chan size:%v", len(p.chVerifyBlock))
 	blk := vbm.blk
 	switch vbm.p2pType {
 	case p2p.NewBlock:
@@ -274,7 +274,7 @@ func (p *PoB) blockLoop() {
 
 func (p *PoB) scheduleLoop() {
 	nextSchedule := timeUntilNextSchedule(time.Now().UnixNano())
-	ilog.Infof("nextSchedule: %.2f", time.Duration(nextSchedule).Seconds())
+	ilog.Debugf("nextSchedule: %.2f", time.Duration(nextSchedule).Seconds())
 	for {
 		select {
 		case <-time.After(time.Duration(nextSchedule)):
@@ -293,6 +293,8 @@ func (p *PoB) scheduleLoop() {
 						limitTime = time.Millisecond * 10
 					}
 					blk, err := generateBlock(p.account, p.txPool, p.produceDB, limitTime)
+					ilog.Infof("Gen block - @%v id:%v..., num:%v, t:%v, txs:%v, confirmed:%v, et:%v",
+						num, p.account.ID[:10], blk.Head.Number, blk.Head.Time, len(blk.Txs), p.blockCache.LinkedRoot().Head.Number, calculateTime(blk))
 					p.txPool.Release()
 					if err != nil {
 						ilog.Error(err)
@@ -304,7 +306,6 @@ func (p *PoB) scheduleLoop() {
 						continue
 					}
 					p.p2pService.Broadcast(blkByte, p2p.NewBlock, p2p.UrgentMessage, true)
-					ilog.Infof("[pob] generate block time cost: %v, %v, %v, %v", num, limitTime, calculateTime(blk), p.account.ID[4:6])
 					metricsGenerateBlockTimeCost.Set(calculateTime(blk), nil)
 					update := false
 					if num == continuousNum-1 {
@@ -324,16 +325,31 @@ func (p *PoB) scheduleLoop() {
 					case <-generateBlockTicker.C:
 					}
 				}
-				ilog.Info("generateTxsNum: ", generateTxsNum)
 				metricsTxSize.Set(float64(generateTxsNum), nil)
 				generateBlockTicker.Stop()
 			}
 			nextSchedule = timeUntilNextSchedule(time.Now().UnixNano())
-			ilog.Infof("nextSchedule: %.2f", time.Duration(nextSchedule).Seconds())
+			ilog.Debugf("nextSchedule: %.2f", time.Duration(nextSchedule).Seconds())
 		case <-p.exitSignal:
 			return
 		}
 	}
+}
+func (p *PoB) recoverBlock(blk *block.Block, witnessList blockcache.WitnessList) error {
+	_, err := p.blockCache.Find(blk.HeadHash())
+	if err == nil {
+		return errDuplicate
+	}
+	err = verifyBasics(blk.Head, blk.Sign)
+	if err != nil {
+		return err
+	}
+	parent, err := p.blockCache.Find(blk.Head.ParentHash)
+	p.blockCache.AddWithWit(blk, witnessList)
+	if err == nil && parent.Type == blockcache.Linked {
+		return p.addExistingBlock(blk, parent.Block, true)
+	}
+	return errSingle
 }
 
 func (p *PoB) handleRecvBlock(blk *block.Block, update bool) error {
@@ -371,6 +387,15 @@ func (p *PoB) addExistingBlock(blk *block.Block, parentBlock *block.Block, updat
 	p.txPool.AddLinkedNode(node)
 	p.blockCache.Link(node)
 	p.updateInfo(node, update)
+	if node.Head.Witness != p.account.ID {
+		if tmpWitness != node.Head.Witness {
+			tmpWitness = node.Head.Witness
+			tmpcontinuousNum = 0
+		}
+		ilog.Infof("Rec block - @%v id:%v..., num:%v, t:%v, txs:%v, confirmed:%v, et:%v",
+			tmpcontinuousNum, node.Head.Witness[:10], node.Head.Number, node.Head.Time, len(node.Txs), p.blockCache.LinkedRoot().Head.Number, calculateTime(node.Block))
+		tmpcontinuousNum++
+	}
 	for child := range node.Children {
 		p.addExistingBlock(child.Block, node.Block, true)
 	}
