@@ -20,6 +20,7 @@ type DebugServer struct {
 	p2p      *p2p.NetService
 	blkCache blockcache.BlockCache
 	blkChain block.Chain
+	panic    chan struct{}
 }
 
 // NewDebugServer returns new debug server
@@ -30,6 +31,7 @@ func NewDebugServer(conf *common.DebugConfig, p2p *p2p.NetService, blkCache bloc
 		p2p:      p2p,
 		blkCache: blkCache,
 		blkChain: blkChain,
+		panic:    make(chan struct{}),
 	}
 }
 
@@ -65,10 +67,21 @@ func (d *DebugServer) Start() error {
 			rw.Write(bytes)
 		})
 
+	http.HandleFunc(
+		"/debug/panic/",
+		func(rw http.ResponseWriter, r *http.Request) {
+			d.panic <- struct{}{}
+		})
+
 	go func() {
 		if err := d.srv.ListenAndServe(); err != http.ErrServerClosed {
 			ilog.Errorf("Debug server listen failed. err=%v", err)
 		}
+	}()
+
+	go func() {
+		<-d.panic
+		panic("panic from debug")
 	}()
 
 	return nil
