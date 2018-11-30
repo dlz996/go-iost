@@ -35,7 +35,9 @@ var (
 
 var (
 	blockReqTimeout = 3 * time.Second
-	continuousNum   = 10
+	continuousNum   = 30
+	oneBlockTime    = blockReqTimeout / time.Duration(continuousNum)
+	oneBlockGenTime = oneBlockTime * 83 / 100
 	tWitness        = ""
 	tContinuousNum  = 0
 )
@@ -301,14 +303,14 @@ func (p *PoB) scheduleLoop() {
 			t := time.Now()
 			if !staticProperty.SlotUsed[t.Unix()] && p.baseVariable.Mode() == global.ModeNormal && witnessOfNanoSec(t.UnixNano()) == p.account.ID {
 				staticProperty.SlotUsed[t.Unix()] = true
-				generateBlockTicker := time.NewTicker(time.Millisecond * 300)
+				generateBlockTicker := time.NewTicker(oneBlockTime)
 				generateTxsNum = 0
 				p.quitGenerateMode = make(chan struct{})
 				for num := 0; num < continuousNum; num++ {
 					p.txPool.Lock()
 					var limitTime time.Duration
 					if num < continuousNum-2 {
-						limitTime = time.Millisecond * 250
+						limitTime = oneBlockGenTime
 					} else {
 						limitTime = time.Millisecond * 30
 					}
