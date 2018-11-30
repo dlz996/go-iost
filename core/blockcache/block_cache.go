@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"time"
 
 	"os"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/iost-official/go-iost/db"
 	"github.com/iost-official/go-iost/db/wal"
 	"github.com/iost-official/go-iost/ilog"
+	"github.com/iost-official/go-iost/metrics"
 	"github.com/xlab/treeprint"
 )
 
@@ -42,6 +44,8 @@ const (
 
 var (
 	blockCacheWALDir = "./block_cache_wal"
+
+	recoverTime = metrics.NewGauge("iost_blockcache_recover_time", nil)
 )
 
 // BlockCacheNode is the implementation of BlockCacheNode
@@ -268,6 +272,12 @@ func NewBlockCache(baseVariable global.BaseVariable) (*BlockCacheImpl, error) {
 
 // Recover recover previews block cache
 func (bc *BlockCacheImpl) Recover(p conAlgo) (err error) {
+	st := time.Now()
+	defer func(start time.Time) {
+		cost := time.Since(st).Nanoseconds()
+		recoverTime.Set(float64(cost), nil)
+	}(st)
+
 	if bc.wal.HasDecoder() {
 		//Get All entries
 		_, entries, err := bc.wal.ReadAll()

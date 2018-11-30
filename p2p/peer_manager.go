@@ -28,7 +28,7 @@ import (
 var (
 	dumpRoutingTableInterval = 5 * time.Minute
 	syncRoutingTableInterval = 30 * time.Second
-	metricsStatInterval      = 3 * time.Second
+	metricsStatInterval      = 1 * time.Second
 	findBPInterval           = 2 * time.Second
 )
 
