@@ -76,6 +76,8 @@ func New(conf *common.Config) *IServer {
 
 	debug := NewDebugServer(conf.Debug, p2pService, blkCache, bv.BlockChain())
 
+	ilog.Info("blockcache:", blkCache.Draw())
+
 	return &IServer{
 		bv:        bv,
 		p2p:       p2pService,
