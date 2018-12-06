@@ -743,13 +743,13 @@ func (pm *PeerManager) NeighborStat() map[string]interface{} {
 	if len(pids) > 30 {
 		pids = pids[0:30]
 	}
-	addrBook := make(map[string][]string)
-	for _, pid := range pids {
-		for _, addr := range pm.peerStore.Addrs(pid) {
-			addrBook[pid.Pretty()] = append(addrBook[pid.Pretty()], addr.String())
-		}
-	}
-	ret["addr_book"] = addrBook
+	/* addrBook := make(map[string][]string) */
+	// for _, pid := range pids {
+	// for _, addr := range pm.peerStore.Addrs(pid) {
+	// addrBook[pid.Pretty()] = append(addrBook[pid.Pretty()], addr.String())
+	// }
+	// }
+	/* ret["addr_book"] = addrBook */
 
 	/*  for _, p := range pm.GetAllNeighbors() { */
 	// ret[p.ID()] = map[string]interface{}{
