@@ -95,7 +95,12 @@ func New(account *account.KeyPair, baseVariable global.BaseVariable, blockCache 
 	staticProperty = newStaticProperty(p.account, blockCache.LinkedRoot().Active())
 	err := p.blockCache.Recover(&p)
 	if err != nil {
-		ilog.Error("Failed to recover blockCache")
+		ilog.Error("Failed to recover blockCache, err: ", err)
+		ilog.Info("Don't Recover, Move old file to BlockCacheWALCorrupted")
+		err = p.blockCache.NewWAL(baseVariable.Config())
+		if err != nil {
+			ilog.Error(" Failed to NewWAL, err: ", err)
+		}
 	}
 	close(p.quitGenerateMode)
 	return &p
