@@ -43,9 +43,8 @@ const (
 )
 
 var (
-	blockCacheWALDir = "./block_cache_wal"
-
-	recoverTime = metrics.NewGauge("iost_blockcache_recover_time", nil)
+	recoverTime      = metrics.NewGauge("iost_blockcache_recover_time", nil)
+	blockCacheWALDir = "./BlockCacheWAL"
 )
 
 // BlockCacheNode is the implementation of BlockCacheNode
@@ -231,7 +230,7 @@ func (bc *BlockCacheImpl) hmdel(hash []byte) {
 
 // NewBlockCache return a new BlockCache instance
 func NewBlockCache(baseVariable global.BaseVariable) (*BlockCacheImpl, error) {
-	w, err := wal.Create(blockCacheWALDir, []byte("block_cache_wal"))
+	w, err := wal.Create(baseVariable.Config().DB.LdbPath+blockCacheWALDir, []byte("block_cache_wal"))
 	if err != nil {
 		return nil, err
 	}
@@ -247,6 +246,7 @@ func NewBlockCache(baseVariable global.BaseVariable) (*BlockCacheImpl, error) {
 	bc.linkedRoot.Head.Number = -1
 	lib, err := baseVariable.BlockChain().Top()
 	if err == nil {
+		ilog.Info("Got LIB: ", lib.Head.Number)
 		bc.linkedRoot = NewBCN(nil, lib)
 		bc.linkedRoot.Type = Linked
 		bc.singleRoot.Type = Virtual
@@ -303,11 +303,13 @@ func (bc *BlockCacheImpl) apply(entry wal.Entry, p conAlgo) (err error) {
 		if err != nil {
 			return
 		}
-	case BcMessageType_SetRootType:
+		/*case BcMessageType_SetRootType:
 		err = bc.applySetRoot(bcMessage.Data)
+		ilog.Info("Finish ApplySetRoot!")
+		ilog.Flush()
 		if err != nil {
 			return
-		}
+		}*/
 	}
 	return
 }
@@ -317,11 +319,16 @@ func (bc *BlockCacheImpl) applyLink(b []byte, p conAlgo) (err error) {
 	//bc.Add(&block)
 	p.RecoverBlock(&block, witnessList)
 
-	return
+	return err
 }
 
 func (bc *BlockCacheImpl) applySetRoot(b []byte) (err error) {
-
+	bcn, bo := bc.hmget(b)
+	if bo {
+		bc.flush(bcn)
+		bc.delSingle()
+		bc.updateLongest()
+	}
 	return
 }
 
@@ -336,7 +343,7 @@ func (bc *BlockCacheImpl) Link(bcn *BlockCacheNode) {
 	}
 	index, err := bc.writeAddNodeWAL(bcn)
 	if err != nil {
-		ilog.Error("Failed to write add node WAL!")
+		ilog.Error("Failed to write add node WAL!", err)
 	}
 	bcn.walIndex = index
 	bcn.Type = Linked
@@ -567,6 +574,7 @@ func (bc *BlockCacheImpl) writeAddNodeWAL(h *BlockCacheNode) (uint64, error) {
 	}
 	return bc.wal.SaveSingle(ent)
 }
+
 func (bc *BlockCacheImpl) cutWALFiles(h *BlockCacheNode) error {
 	bc.wal.RemoveFiles(h.walIndex)
 	return nil
