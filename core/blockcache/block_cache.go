@@ -44,6 +44,8 @@ const (
 
 var (
 	recoverTime      = metrics.NewGauge("iost_blockcache_recover_time", nil)
+	readAllTime      = metrics.NewGauge("iost_blockcache_readAll", nil)
+	applyTime        = metrics.NewGauge("iost_blockcache_apply", nil)
 	blockCacheWALDir = "./BlockCacheWAL"
 )
 
@@ -280,16 +282,20 @@ func (bc *BlockCacheImpl) Recover(p conAlgo) (err error) {
 
 	if bc.wal.HasDecoder() {
 		//Get All entries
+		s := time.Now()
 		_, entries, err := bc.wal.ReadAll()
+		readAllTime.Set(float64(time.Since(s).Nanoseconds()), nil)
 		if err != nil {
 			return err
 		}
+		s = time.Now()
 		for _, entry := range entries {
 			err := bc.apply(entry, p)
 			if err != nil {
 				return err
 			}
 		}
+		applyTime.Set(float64(time.Since(s).Nanoseconds()), nil)
 	}
 	return
 }
