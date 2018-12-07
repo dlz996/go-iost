@@ -420,7 +420,7 @@ func (bc *BlockCacheImpl) updateLongest() {
 func (bc *BlockCacheImpl) AddWithWit(blk *block.Block, witnessList WitnessList) (bcn *BlockCacheNode) {
 	bcn = bc.Add(blk)
 	if bcn == nil {
-		return
+		return nil
 	}
 	bcn.WitnessList = witnessList
 	return bcn
